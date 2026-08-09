@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% from "_avatar.html" import avatar %}
 {% block titulo %}{{ f.nome.split(' ')[0] }}{% endblock %}
+{% block manifest %}/manifest/{{ f.id }}.json{% endblock %}
+{% block appleicon %}{% if f.foto %}/icone/{{ f.id }}.png{% else %}/static/icon-180.png{% endif %}{% endblock %}
 {% block canto %}<a href="/ponto" class="mini">trocar</a>{% endblock %}
 {% block conteudo %}
 
