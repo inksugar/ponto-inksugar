@@ -1,3 +1,4 @@
+import base64
 import os
 import urllib.parse
 import urllib.request
@@ -8,7 +9,7 @@ from zoneinfo import ZoneInfo
 
 import psycopg2
 import psycopg2.extras
-from flask import Flask, render_template, request, redirect, url_for, session
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, Response
 
 TZ = ZoneInfo("America/Sao_Paulo")
 DIAS = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
@@ -161,6 +162,48 @@ def sw():
 @app.route("/manifest.json")
 def manifest():
     return app.send_static_file("manifest.json"), 200, {"Content-Type": "application/manifest+json"}
+
+
+@app.route("/manifest/<int:fid>.json")
+def manifest_pessoa(fid):
+    with db() as conn, conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        cur.execute("SELECT * FROM funcionarios WHERE id=%s", (fid,))
+        f = cur.fetchone()
+    if not f:
+        return redirect(url_for("manifest"))
+
+    icone = url_for("icone_pessoa", fid=fid) if f["foto"] else "/static/icon-512.png"
+    dados = {
+        "name": f"Ponto — {f['nome']}",
+        "short_name": f["nome"].split()[0],
+        "start_url": f"/ponto/{fid}",
+        "scope": "/",
+        "display": "standalone",
+        "orientation": "portrait",
+        "background_color": "#0A0A0B",
+        "theme_color": "#0A0A0B",
+        "lang": "pt-BR",
+        "icons": [
+            {"src": icone, "sizes": "512x512", "type": "image/png", "purpose": "any"},
+            {"src": icone, "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+        ],
+    }
+    return jsonify(dados), 200, {"Content-Type": "application/manifest+json"}
+
+
+@app.route("/icone/<int:fid>.png")
+def icone_pessoa(fid):
+    with db() as conn, conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        cur.execute("SELECT foto FROM funcionarios WHERE id=%s", (fid,))
+        f = cur.fetchone()
+    if not f or not f["foto"] or "," not in f["foto"]:
+        return redirect("/static/icon-512.png")
+    try:
+        bruto = base64.b64decode(f["foto"].split(",", 1)[1])
+    except Exception:
+        return redirect("/static/icon-512.png")
+    return Response(bruto, mimetype="image/jpeg",
+                    headers={"Cache-Control": "public, max-age=86400"})
 
 
 @app.route("/ponto")
