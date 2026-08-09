@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0A0A0B">
+<link rel="manifest" href="/static/manifest.json">
+<link rel="apple-touch-icon" href="/static/icon-180.png">
+<link rel="icon" href="/static/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ponto InkSugar">
 <title>{% block titulo %}Registro de horas{% endblock %} · InkSugar</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -23,9 +30,8 @@
   .wrap{max-width:560px;margin:0 auto;padding:26px 18px 44px}
   .wrap.larga{max-width:1000px}
   .marca{margin-bottom:24px;display:flex;justify-content:space-between;align-items:center;gap:12px;
-    font-size:.72rem;letter-spacing:.26em;text-transform:uppercase;color:var(--fraco)}
-  .marca img{height:38px;width:auto;display:block}
-  .marca .rot{display:flex;align-items:center;gap:10px}
+    font-size:.7rem;letter-spacing:.22em;text-transform:uppercase;color:var(--fraco)}
+  .marca img{height:88px;width:auto;display:block}
   h1{font-size:1.9rem;line-height:1.05;margin:0 0 6px;letter-spacing:-.02em}
   h2{font-size:1.05rem;margin:0 0 14px}
   .sub{color:var(--fraco);margin:0 0 22px;font-size:.95rem}
@@ -138,10 +144,15 @@
 <body>
 <div class="wrap {% block larga %}{% endblock %}">
   <div class="marca">
-    <span class="rot"><img src="/static/logo.png" alt="InkSugar"> Registro de horas</span>
+    <a href="/ponto"><img src="/static/logo.png" alt="InkSugar"></a>
     {% block canto %}{% endblock %}
   </div>
   {% block conteudo %}{% endblock %}
 </div>
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/static/sw.js', { scope: '/' }).catch(() => {});
+  }
+</script>
 </body>
 </html>
