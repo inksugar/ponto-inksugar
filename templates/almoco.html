@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block titulo %}Almoço{% endblock %}
+{% block canto %}<a href="/ponto/{{ f.id }}" class="mini">voltar</a>{% endblock %}
+{% block conteudo %}
+<h1>Quanto durou o almoço?</h1>
+<p class="sub">Entrada às {{ aberto.entrada.strftime('%H:%M') }} · saída agora, por volta de {{ saida_prevista }}.</p>
+
+<form method="post" id="form">
+  <div class="card" style="text-align:center">
+    <div class="passo">
+      <button type="button" onclick="ajusta(-15)" aria-label="Diminuir 15 minutos">−</button>
+      <div class="valor"><span id="mostra">{{ padrao }}</span><small>minutos</small></div>
+      <button type="button" onclick="ajusta(15)" aria-label="Aumentar 15 minutos">+</button>
+    </div>
+    <input type="hidden" name="almoco" id="almoco" value="{{ padrao }}">
+    <p class="mini" id="dica" style="margin:14px 0 0"></p>
+  </div>
+  <button class="btn" type="submit">Registrar saída</button>
+</form>
+<a class="btn claro" href="/ponto/{{ f.id }}">Cancelar</a>
+
+<script>
+  const BRUTO = {{ bruto }}, LIMITE = 420, PADRAO = {{ padrao }};
+  let v = PADRAO;
+  const mostra = document.getElementById('mostra'), campo = document.getElementById('almoco'), dica = document.getElementById('dica');
+  function pinta(){
+    mostra.textContent = v; campo.value = v;
+    const trabalhado = Math.max(0, BRUTO - v);
+    const h = Math.floor(trabalhado/60) + 'h' + String(trabalhado%60).padStart(2,'0');
+    dica.textContent = (v < PADRAO && trabalhado >= LIMITE)
+      ? 'Com ' + h + ' de jornada o almoço mínimo é ' + PADRAO + ' min — vai ser ajustado.'
+      : 'Fica ' + h + ' trabalhados hoje.';
+  }
+  function ajusta(n){ v = Math.max(0, Math.min(240, v + n)); pinta(); }
+  pinta();
+</script>
+{% endblock %}

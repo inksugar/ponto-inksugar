@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% from "_avatar.html" import avatar %}
+{% block titulo %}{{ tipo }} registrada{% endblock %}
+{% block conteudo %}
+<div class="card" style="text-align:center;padding:32px 20px">
+  <span class="selo {{ cor }}">{{ tipo }} registrada</span>
+  <div class="relogio" style="margin:16px 0 6px">{{ hora }}</div>
+  <div style="font-size:1.15rem;font-weight:500">{{ f.nome }}</div>
+  {% if detalhe %}<p class="mini" style="margin-top:12px">{{ detalhe }}</p>{% endif %}
+  {% if aviso %}<div class="aviso">{{ aviso }}</div>{% endif %}
+</div>
+<a class="btn claro" href="/ponto">Concluir</a>
+<script>setTimeout(() => location.href = '/ponto', 12000);</script>
+{% endblock %}

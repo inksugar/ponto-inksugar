@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% from "_avatar.html" import avatar %}
+{% block titulo %}{{ f.nome }}{% endblock %}
+{% block larga %}larga{% endblock %}
+{% block canto %}<a href="/admin" class="mini">gestão</a>{% endblock %}
+{% block conteudo %}
+<div class="card" style="display:flex;gap:14px;align-items:center">
+  {{ avatar(f, 'sm') }}
+  <div>
+    <div class="nome" style="font-size:1.2rem">{{ f.nome }}</div>
+    <div class="cargo">{{ f.cargo }} · {{ brl(f.valor_hora) }}/h{% if not f.ativo %} · inativa{% endif %}</div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Semanas fechadas</h2>
+  <table>
+    <tr><th>Semana</th><th class="num">Total de horas</th><th class="num">Recebido</th><th class="noprint"></th></tr>
+    {% for s in semanas %}
+    <tr>
+      <td>{{ s.ini.strftime('%d/%m') }} a {{ s.fim.strftime('%d/%m/%Y') }}</td>
+      <td class="num">{{ hm(s.minutos) }}</td>
+      <td class="num"><b>{{ brl(s.valor) }}</b></td>
+      <td class="noprint"><a class="mini" href="/admin/semana?ini={{ s.ini }}&f={{ f.id }}">ver detalhe</a></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4" class="mini">Nenhuma semana fechada ainda.</td></tr>
+    {% endfor %}
+    {% if semanas %}
+    <tr><td><b>Acumulado</b></td><td></td><td class="num"><b style="color:var(--amarelo)">{{ brl(total) }}</b></td><td class="noprint"></td></tr>
+    {% endif %}
+  </table>
+</div>
+
+<div class="barra noprint">
+  <button class="btn claro" style="width:auto" onclick="window.print()">Imprimir</button>
+  <a class="btn claro" style="width:auto" href="/admin">Voltar</a>
+</div>
+{% endblock %}

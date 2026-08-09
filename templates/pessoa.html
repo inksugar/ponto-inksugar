@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% from "_avatar.html" import avatar %}
+{% block titulo %}{{ f.nome.split(' ')[0] }}{% endblock %}
+{% block canto %}<a href="/ponto" class="mini">trocar</a>{% endblock %}
+{% block conteudo %}
+
+<div class="card" style="display:flex;gap:14px;align-items:center">
+  {{ avatar(f, 'sm') }}
+  <div>
+    <div class="nome" style="font-size:1.2rem">{{ f.nome }}</div>
+    <div class="cargo">{{ f.cargo }}</div>
+  </div>
+</div>
+
+<div class="card" style="text-align:center">
+  <div class="relogio" id="relogio">--:--</div>
+  <div class="data" id="data"></div>
+</div>
+
+{% if aberto %}
+  <div class="card" style="text-align:center">
+    <span class="selo entrada">Entrada às {{ aberto.entrada.strftime('%H:%M') }}</span>
+    <p class="mini" style="margin:12px 0 0">Turno em aberto{% if aberto.dia != aberto.entrada.date() %} desde {{ aberto.dia.strftime('%d/%m') }}{% endif %}.</p>
+  </div>
+  <a class="btn" href="/ponto/{{ f.id }}/saida">Registrar saída</a>
+{% else %}
+  {% if fechado %}
+  <div class="card" style="text-align:center">
+    <span class="selo saida">Dia fechado</span>
+    <p class="mini" style="margin:12px 0 0">
+      {{ fechado.entrada.strftime('%H:%M') }} às {{ fechado.saida.strftime('%H:%M') }} ·
+      {{ fechado.almoco_min }} min de almoço · total {{ hm(fechado.minutos) }}
+    </p>
+  </div>
+  {% endif %}
+  <form method="post" action="/ponto/{{ f.id }}/entrada">
+    <button class="btn verde" type="submit">Registrar entrada</button>
+  </form>
+{% endif %}
+
+<a class="btn claro" href="/ponto">Voltar</a>
+
+<script>
+  const r = document.getElementById('relogio'), d = document.getElementById('data');
+  const fh = new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit'});
+  const fd = new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',weekday:'long',day:'2-digit',month:'long'});
+  const tick = () => { const n = new Date(); r.textContent = fh.format(n); d.textContent = fd.format(n); };
+  tick(); setInterval(tick, 1000);
+</script>
+{% endblock %}

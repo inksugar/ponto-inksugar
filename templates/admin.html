@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% from "_avatar.html" import avatar %}
+{% block titulo %}Gestão{% endblock %}
+{% block larga %}larga{% endblock %}
+{% block canto %}<span><a href="/ponto" class="mini">ponto</a> · <a href="/admin/sair" class="mini">sair</a></span>{% endblock %}
+{% block conteudo %}
+<h1>Gestão</h1>
+<p class="sub">Semana atual: {{ ini.strftime('%d/%m') }} a {{ fim.strftime('%d/%m') }}.</p>
+
+{% if abertos %}
+<div class="alerta">
+  <b>Saída não registrada:</b>
+  {% for a in abertos %}{{ a.nome.split(' ')[0] }} ({{ a.dia.strftime('%d/%m') }}){{ ", " if not loop.last }}{% endfor %}
+  — corrija em <a href="/admin/semana?ini={{ ini }}">registros da semana</a>.
+</div>
+{% endif %}
+{% if sem_entrada and dia_semana < 5 %}
+<div class="aviso"><b>Ainda sem entrada hoje:</b> {{ sem_entrada|join(', ') }}</div>
+{% endif %}
+
+<a class="btn" href="/admin/semana?ini={{ ini }}">Ver registros da semana</a>
+
+<div class="card">
+  <h2>Equipe</h2>
+  {% for f in equipe %}
+  <form method="post" action="/admin/funcionario" class="card" style="margin-bottom:12px;background:#0A2C40">
+    <input type="hidden" name="id" value="{{ f.id }}">
+    <input type="hidden" name="foto" id="foto{{ f.id }}">
+    <div style="display:flex;gap:14px;align-items:center;margin-bottom:12px">
+      {{ avatar(f, 'sm') }}
+      <div style="flex:1">
+        <label for="troca{{ f.id }}">Foto</label>
+        <input type="file" accept="image/*" id="troca{{ f.id }}" onchange="encolhe(this,'foto{{ f.id }}')">
+      </div>
+    </div>
+    <div class="grade">
+      <div><label>Nome</label><input name="nome" value="{{ f.nome }}" required></div>
+      <div><label>Cargo</label><input name="cargo" value="{{ f.cargo }}"></div>
+      <div><label>Valor da hora (R$)</label><input name="valor_hora" value="{{ '%.2f'|format(f.valor_hora)|replace('.', ',') }}"></div>
+      <div>
+        <label>Situação</label>
+        <label class="mini" style="text-transform:none;letter-spacing:0;display:flex;gap:8px;align-items:center;margin-top:10px">
+          <input type="checkbox" name="ativo" {% if f.ativo %}checked{% endif %}> aparece na tela do ponto
+        </label>
+      </div>
+    </div>
+    <div class="barra" style="margin:14px 0 0">
+      <button class="btn claro" style="width:auto" type="submit">Salvar</button>
+      <a class="btn claro" style="width:auto" href="/admin/ficha/{{ f.id }}">Ficha e semanas</a>
+      <button class="btn claro" style="width:auto;border-color:var(--vermelho);color:var(--vermelho)"
+              type="submit" formaction="/admin/funcionario/{{ f.id }}/excluir"
+              formnovalidate onclick="return confirm('Excluir {{ f.nome }} e todos os registros? Não dá pra desfazer.')">Excluir</button>
+    </div>
+  </form>
+  {% else %}
+  <p class="mini">Ninguém cadastrado ainda.</p>
+  {% endfor %}
+</div>
+
+<div class="card">
+  <h2>Incluir funcionário</h2>
+  <form method="post" action="/admin/funcionario">
+    <input type="hidden" name="foto" id="fotoNova">
+    <div class="grade">
+      <div><label for="n">Nome</label><input id="n" name="nome" required></div>
+      <div><label for="c">Cargo</label><input id="c" name="cargo" placeholder="Produção"></div>
+      <div><label for="v">Valor da hora (R$)</label><input id="v" name="valor_hora" value="0,00"></div>
+      <div><label for="p">Foto</label><input id="p" type="file" accept="image/*" onchange="encolhe(this,'fotoNova')"></div>
+    </div>
+    <button class="btn" style="margin-top:14px" type="submit">Incluir</button>
+  </form>
+  <p class="mini">Sem foto, aparece um círculo colorido com as iniciais.</p>
+</div>
+
+<script>
+function encolhe(input, destino){
+  const arq = input.files[0]; if(!arq) return;
+  const img = new Image();
+  img.onload = () => {
+    const L = 256, c = document.createElement('canvas');
+    c.width = c.height = L;
+    const lado = Math.min(img.width, img.height);
+    c.getContext('2d').drawImage(img, (img.width-lado)/2, (img.height-lado)/2, lado, lado, 0, 0, L, L);
+    document.getElementById(destino).value = c.toDataURL('image/jpeg', 0.8);
+    input.insertAdjacentHTML('afterend', '<span class="mini"> foto pronta — clique em salvar</span>');
+  };
+  img.src = URL.createObjectURL(arq);
+}
+</script>
+{% endblock %}
