@@ -153,6 +153,16 @@ def home():
     return redirect(url_for("ponto"))
 
 
+@app.route("/sw.js")
+def sw():
+    return app.send_static_file("sw.js"), 200, {"Content-Type": "application/javascript"}
+
+
+@app.route("/manifest.json")
+def manifest():
+    return app.send_static_file("manifest.json"), 200, {"Content-Type": "application/manifest+json"}
+
+
 @app.route("/ponto")
 def ponto():
     with db() as conn, conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
