@@ -17,6 +17,7 @@ JORNADA_LIMITE = 420  # 7h em minutos
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "troque-isso")
+app.permanent_session_lifetime = timedelta(days=30)
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 ADMIN_SENHA = os.environ.get("ADMIN_SENHA", "inksugar")
@@ -43,6 +44,8 @@ def init_db():
                 nome TEXT NOT NULL,
                 cargo TEXT NOT NULL DEFAULT '',
                 valor_hora NUMERIC(10,2) NOT NULL DEFAULT 0,
+                hibrido BOOLEAN NOT NULL DEFAULT FALSE,
+                valor_hora_home NUMERIC(10,2) NOT NULL DEFAULT 0,
                 foto TEXT,
                 ativo BOOLEAN NOT NULL DEFAULT TRUE
             );
@@ -53,7 +56,8 @@ def init_db():
                 entrada TIMESTAMP,
                 saida TIMESTAMP,
                 almoco_min INTEGER NOT NULL DEFAULT 0,
-                minutos INTEGER
+                minutos INTEGER,
+                local TEXT NOT NULL DEFAULT 'interno'
             );
             CREATE TABLE IF NOT EXISTS fechamentos (
                 id SERIAL PRIMARY KEY,
@@ -62,10 +66,28 @@ def init_db():
                 fim DATE NOT NULL,
                 minutos INTEGER NOT NULL,
                 valor NUMERIC(10,2) NOT NULL,
+                bonus NUMERIC(10,2) NOT NULL DEFAULT 0,
+                desconto NUMERIC(10,2) NOT NULL DEFAULT 0,
+                obs TEXT DEFAULT '',
                 criado_em TIMESTAMP NOT NULL DEFAULT NOW(),
                 UNIQUE (funcionario_id, ini, fim)
             );
+            CREATE TABLE IF NOT EXISTS ajustes (
+                id SERIAL PRIMARY KEY,
+                funcionario_id INTEGER NOT NULL REFERENCES funcionarios(id) ON DELETE CASCADE,
+                ini DATE NOT NULL,
+                bonus NUMERIC(10,2) NOT NULL DEFAULT 0,
+                desconto NUMERIC(10,2) NOT NULL DEFAULT 0,
+                obs TEXT DEFAULT '',
+                UNIQUE (funcionario_id, ini)
+            );
             CREATE INDEX IF NOT EXISTS idx_pontos_dia ON pontos (dia);
+            ALTER TABLE funcionarios ADD COLUMN IF NOT EXISTS hibrido BOOLEAN NOT NULL DEFAULT FALSE;
+            ALTER TABLE funcionarios ADD COLUMN IF NOT EXISTS valor_hora_home NUMERIC(10,2) NOT NULL DEFAULT 0;
+            ALTER TABLE pontos ADD COLUMN IF NOT EXISTS local TEXT NOT NULL DEFAULT 'interno';
+            ALTER TABLE fechamentos ADD COLUMN IF NOT EXISTS bonus NUMERIC(10,2) NOT NULL DEFAULT 0;
+            ALTER TABLE fechamentos ADD COLUMN IF NOT EXISTS desconto NUMERIC(10,2) NOT NULL DEFAULT 0;
+            ALTER TABLE fechamentos ADD COLUMN IF NOT EXISTS obs TEXT DEFAULT '';
         """)
 
 
@@ -82,6 +104,16 @@ def hm(minutos):
         return "—"
     minutos = int(minutos)
     return f"{minutos // 60}h{minutos % 60:02d}"
+
+
+def dinheiro(txt):
+    txt = (txt or "0").strip().replace("R$", "").replace(" ", "")
+    if "," in txt:
+        txt = txt.replace(".", "").replace(",", ".")
+    try:
+        return round(float(txt), 2)
+    except ValueError:
+        return 0.0
 
 
 def brl(v):
@@ -195,14 +227,17 @@ def bater_saida(fid):
             almoco = max(0, min(240, int(request.form.get("almoco") or 0)))
         except ValueError:
             almoco = ALMOCO_PADRAO
+        local = request.form.get("local") if f["hibrido"] else "interno"
+        local = local if local in ("interno", "home") else "interno"
 
         almoco, minutos, ajustado = calcula(aberto["entrada"], n, almoco)
         cur.execute(
-            "UPDATE pontos SET saida=%s, almoco_min=%s, minutos=%s WHERE id=%s",
-            (n, almoco, minutos, aberto["id"]),
+            "UPDATE pontos SET saida=%s, almoco_min=%s, minutos=%s, local=%s WHERE id=%s",
+            (n, almoco, minutos, local, aberto["id"]),
         )
 
-    detalhe = f"{almoco} min de almoço registrados. Total do dia: {hm(minutos)}."
+    onde = " em home office" if local == "home" else ""
+    detalhe = f"{almoco} min de almoço registrados. Total do dia{onde}: {hm(minutos)}."
     aviso = ("A jornada passou de 7h, então o almoço foi ajustado para 30 min."
              if ajustado else None)
     return render_template("ok.html", f=f, tipo="Saída", cor="saida",
@@ -224,6 +259,7 @@ def admin_only(fn):
 def login():
     if request.method == "POST":
         if request.form.get("senha") == ADMIN_SENHA:
+            session.permanent = True
             session["admin"] = True
             return redirect(url_for("admin"))
         return render_template("login.html", erro="Senha incorreta.")
@@ -274,21 +310,26 @@ def salvar_funcionario():
     fid = request.form.get("id")
     nome = (request.form.get("nome") or "").strip()
     cargo = (request.form.get("cargo") or "").strip()
-    valor = (request.form.get("valor_hora") or "0").replace(".", "").replace(",", ".")
+    valor = dinheiro(request.form.get("valor_hora"))
+    hibrido = bool(request.form.get("hibrido"))
+    valor_home = dinheiro(request.form.get("valor_hora_home")) if hibrido else 0
     ativo = bool(request.form.get("ativo"))
     foto = request.form.get("foto") or None
 
     with db() as conn, conn.cursor() as cur:
         if fid:
             if foto:
-                cur.execute("UPDATE funcionarios SET nome=%s,cargo=%s,valor_hora=%s,ativo=%s,foto=%s WHERE id=%s",
-                            (nome, cargo, valor, ativo, foto, fid))
+                cur.execute("""UPDATE funcionarios SET nome=%s,cargo=%s,valor_hora=%s,
+                               hibrido=%s,valor_hora_home=%s,ativo=%s,foto=%s WHERE id=%s""",
+                            (nome, cargo, valor, hibrido, valor_home, ativo, foto, fid))
             else:
-                cur.execute("UPDATE funcionarios SET nome=%s,cargo=%s,valor_hora=%s,ativo=%s WHERE id=%s",
-                            (nome, cargo, valor, ativo, fid))
+                cur.execute("""UPDATE funcionarios SET nome=%s,cargo=%s,valor_hora=%s,
+                               hibrido=%s,valor_hora_home=%s,ativo=%s WHERE id=%s""",
+                            (nome, cargo, valor, hibrido, valor_home, ativo, fid))
         else:
-            cur.execute("INSERT INTO funcionarios (nome,cargo,valor_hora,foto) VALUES (%s,%s,%s,%s)",
-                        (nome, cargo, valor, foto))
+            cur.execute("""INSERT INTO funcionarios (nome,cargo,valor_hora,hibrido,valor_hora_home,foto)
+                           VALUES (%s,%s,%s,%s,%s,%s)""",
+                        (nome, cargo, valor, hibrido, valor_home, foto))
     return redirect(url_for("admin"))
 
 
@@ -309,13 +350,39 @@ def semana_do_funcionario(cur, fid, ini, fim):
     for r in cur.fetchall():
         regs.setdefault(r["dia"], []).append(r)
 
-    linhas, total = [], 0
+    linhas, interno, home = [], 0, 0
     for i in range(7):
         d = ini + timedelta(days=i)
         for r in regs.get(d, [None]):
-            total += (r["minutos"] or 0) if r else 0
+            if r and r["minutos"]:
+                if r["local"] == "home":
+                    home += r["minutos"]
+                else:
+                    interno += r["minutos"]
             linhas.append({"dia": DIAS[i], "data": d, "reg": r})
-    return linhas, total
+    return linhas, interno, home
+
+
+def ajuste_da_semana(cur, fid, ini):
+    cur.execute("SELECT * FROM ajustes WHERE funcionario_id=%s AND ini=%s", (fid, ini))
+    a = cur.fetchone()
+    return {
+        "bonus": float(a["bonus"]) if a else 0.0,
+        "desconto": float(a["desconto"]) if a else 0.0,
+        "obs": (a["obs"] if a else "") or "",
+    }
+
+
+def bloco_semana(cur, f, ini, fim):
+    linhas, interno, home = semana_do_funcionario(cur, f["id"], ini, fim)
+    aj = ajuste_da_semana(cur, f["id"], ini)
+    bruto = (interno / 60) * float(f["valor_hora"]) + (home / 60) * float(f["valor_hora_home"])
+    return {
+        "f": f, "linhas": linhas,
+        "interno": interno, "home": home, "total": interno + home,
+        "bruto": round(bruto, 2), "bonus": aj["bonus"], "desconto": aj["desconto"], "obs": aj["obs"],
+        "valor": round(bruto + aj["bonus"] - aj["desconto"], 2),
+    }
 
 
 @app.route("/admin/semana")
@@ -333,17 +400,33 @@ def semana():
             cur.execute("SELECT * FROM funcionarios WHERE ativo ORDER BY nome")
             equipe = cur.fetchall()
 
-        blocos = []
-        for f in equipe:
-            linhas, total = semana_do_funcionario(cur, f["id"], ini, fim)
-            blocos.append({
-                "f": f, "linhas": linhas, "total": total,
-                "valor": (total / 60) * float(f["valor_hora"]),
-            })
+        blocos = [bloco_semana(cur, f, ini, fim) for f in equipe]
+        cur.execute("SELECT * FROM fechamentos WHERE ini=%s ORDER BY criado_em DESC LIMIT 1", (ini,))
+        ja = cur.fetchone()
 
     return render_template("semana.html", blocos=blocos, ini=ini, fim=fim,
                            anterior=ini - timedelta(days=7), proxima=ini + timedelta(days=7),
-                           filtro=fid, total_geral=sum(b["valor"] for b in blocos))
+                           filtro=fid, total_geral=sum(b["valor"] for b in blocos),
+                           fechada=ja["criado_em"] if ja else None,
+                           confirmar=request.args.get("confirmar"))
+
+
+@app.route("/admin/semana/ajuste", methods=["POST"])
+@admin_only
+def salvar_ajuste():
+    fid = request.form["funcionario_id"]
+    ini = date.fromisoformat(request.form["ini"])
+    bonus = dinheiro(request.form.get("bonus"))
+    desconto = dinheiro(request.form.get("desconto"))
+    obs = (request.form.get("obs") or "").strip()[:200]
+    with db() as conn, conn.cursor() as cur:
+        cur.execute("""
+            INSERT INTO ajustes (funcionario_id, ini, bonus, desconto, obs)
+            VALUES (%s,%s,%s,%s,%s)
+            ON CONFLICT (funcionario_id, ini)
+            DO UPDATE SET bonus=EXCLUDED.bonus, desconto=EXCLUDED.desconto, obs=EXCLUDED.obs
+        """, (fid, ini, bonus, desconto, obs))
+    return redirect(request.form.get("voltar") or url_for("semana", ini=ini.isoformat()))
 
 
 @app.route("/admin/semana/fechar", methods=["POST"])
@@ -351,17 +434,25 @@ def semana():
 def fechar_semana():
     ini = date.fromisoformat(request.form["ini"])
     fim = ini + timedelta(days=6)
+    confirmado = request.form.get("confirmado")
+
     with db() as conn, conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        if not confirmado:
+            cur.execute("SELECT 1 FROM fechamentos WHERE ini=%s LIMIT 1", (ini,))
+            if cur.fetchone():
+                return redirect(url_for("semana", ini=ini.isoformat(), confirmar=1))
+
         cur.execute("SELECT * FROM funcionarios WHERE ativo ORDER BY nome")
         for f in cur.fetchall():
-            _, total = semana_do_funcionario(cur, f["id"], ini, fim)
-            valor = round((total / 60) * float(f["valor_hora"]), 2)
+            b = bloco_semana(cur, f, ini, fim)
             cur.execute("""
-                INSERT INTO fechamentos (funcionario_id, ini, fim, minutos, valor)
-                VALUES (%s,%s,%s,%s,%s)
+                INSERT INTO fechamentos (funcionario_id, ini, fim, minutos, valor, bonus, desconto, obs)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
                 ON CONFLICT (funcionario_id, ini, fim)
-                DO UPDATE SET minutos=EXCLUDED.minutos, valor=EXCLUDED.valor, criado_em=NOW()
-            """, (f["id"], ini, fim, total, valor))
+                DO UPDATE SET minutos=EXCLUDED.minutos, valor=EXCLUDED.valor,
+                              bonus=EXCLUDED.bonus, desconto=EXCLUDED.desconto,
+                              obs=EXCLUDED.obs, criado_em=NOW()
+            """, (f["id"], ini, fim, b["total"], b["valor"], b["bonus"], b["desconto"], b["obs"]))
     return redirect(url_for("semana", ini=ini.isoformat()))
 
 
@@ -452,6 +543,14 @@ def alertas():
             if not nomes or hoje().weekday() >= 5:
                 return "nada a avisar"
             return whats("Ponto InkSugar: ainda sem entrada hoje — " + ", ".join(nomes))
+
+        if tipo == "fechamento":
+            ini, fim = semana_de(hoje() - timedelta(days=1))
+            cur.execute("SELECT 1 FROM fechamentos WHERE ini=%s LIMIT 1", (ini,))
+            if cur.fetchone():
+                return "semana ja fechada"
+            return whats(f"Ponto InkSugar: semana {ini.strftime('%d/%m')} a {fim.strftime('%d/%m')} "
+                         f"pronta pra fechar quando você puder.")
 
         cur.execute("""
             SELECT f.nome, p.dia FROM pontos p JOIN funcionarios f ON f.id=p.funcionario_id

@@ -15,6 +15,15 @@
     <input type="hidden" name="almoco" id="almoco" value="{{ padrao }}">
     <p class="mini" id="dica" style="margin:14px 0 0"></p>
   </div>
+  {% if f.hibrido %}
+  <div class="card">
+    <p class="mini" style="margin:0 0 10px">Onde você trabalhou hoje?</p>
+    <div class="escolha">
+      <label><input type="radio" name="local" value="interno" checked><span>Interno</span></label>
+      <label><input type="radio" name="local" value="home"><span>Home office</span></label>
+    </div>
+  </div>
+  {% endif %}
   <button class="btn" type="submit">Registrar saída</button>
 </form>
 <a class="btn claro" href="/ponto/{{ f.id }}">Cancelar</a>

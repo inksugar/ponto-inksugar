@@ -36,12 +36,19 @@
     <div class="grade">
       <div><label>Nome</label><input name="nome" value="{{ f.nome }}" required></div>
       <div><label>Cargo</label><input name="cargo" value="{{ f.cargo }}"></div>
-      <div><label>Valor da hora (R$)</label><input name="valor_hora" value="{{ '%.2f'|format(f.valor_hora)|replace('.', ',') }}"></div>
+      <div><label>Valor da hora — interno (R$)</label><input name="valor_hora" value="{{ '%.2f'|format(f.valor_hora)|replace('.', ',') }}"></div>
+      <div>
+        <label>Híbrido</label>
+        <label class="mini quadro"><input type="checkbox" name="hibrido" {% if f.hibrido %}checked{% endif %}
+               onchange="this.closest('form').querySelector('.campo-home').style.display = this.checked ? '' : 'none'"> tem valor de home office</label>
+      </div>
+      <div class="campo-home" {% if not f.hibrido %}style="display:none"{% endif %}>
+        <label>Valor da hora — home (R$)</label>
+        <input name="valor_hora_home" value="{{ '%.2f'|format(f.valor_hora_home)|replace('.', ',') }}">
+      </div>
       <div>
         <label>Situação</label>
-        <label class="mini" style="text-transform:none;letter-spacing:0;display:flex;gap:8px;align-items:center;margin-top:10px">
-          <input type="checkbox" name="ativo" {% if f.ativo %}checked{% endif %}> aparece na tela do ponto
-        </label>
+        <label class="mini quadro"><input type="checkbox" name="ativo" {% if f.ativo %}checked{% endif %}> aparece no ponto</label>
       </div>
     </div>
     <div class="barra" style="margin:14px 0 0">
@@ -64,7 +71,16 @@
     <div class="grade">
       <div><label for="n">Nome</label><input id="n" name="nome" required></div>
       <div><label for="c">Cargo</label><input id="c" name="cargo" placeholder="Produção"></div>
-      <div><label for="v">Valor da hora (R$)</label><input id="v" name="valor_hora" value="0,00"></div>
+      <div><label for="v">Valor da hora — interno (R$)</label><input id="v" name="valor_hora" value="0,00"></div>
+      <div>
+        <label>Híbrido</label>
+        <label class="mini quadro"><input type="checkbox" name="hibrido" id="hib"
+               onchange="document.getElementById('boxHome').style.display = this.checked ? '' : 'none'"> tem valor de home office</label>
+      </div>
+      <div id="boxHome" style="display:none">
+        <label for="vh">Valor da hora — home (R$)</label>
+        <input id="vh" name="valor_hora_home" value="0,00">
+      </div>
       <div><label for="p">Foto</label><input id="p" type="file" accept="image/*" onchange="encolhe(this,'fotoNova')"></div>
     </div>
     <button class="btn" style="margin-top:14px" type="submit">Incluir</button>

@@ -12,7 +12,20 @@
 </div>
 
 <h1>Registro de ponto</h1>
-<p class="sub">Semana de {{ ini.strftime('%d/%m/%Y') }} a {{ fim.strftime('%d/%m/%Y') }}</p>
+<p class="sub">Semana de {{ ini.strftime('%d/%m/%Y') }} a {{ fim.strftime('%d/%m/%Y') }}{% if fechada %} · fechada em {{ fechada.strftime('%d/%m/%Y às %H:%M') }}{% endif %}</p>
+
+{% if confirmar %}
+<div class="aviso noprint">
+  <b>Essa semana já foi fechada</b> em {{ fechada.strftime('%d/%m/%Y às %H:%M') }}.
+  Fechar de novo atualiza os valores guardados nas fichas com o que está na tela agora.
+  <form method="post" action="/admin/semana/fechar" style="margin-top:12px">
+    <input type="hidden" name="ini" value="{{ ini }}">
+    <input type="hidden" name="confirmado" value="1">
+    <button class="btn verde" type="submit">Sim, atualizar o fechamento</button>
+    <a class="btn claro" href="/admin/semana?ini={{ ini }}">Deixar como está</a>
+  </form>
+</div>
+{% endif %}
 
 {% for b in blocos %}
 <div class="card">
@@ -23,6 +36,10 @@
     </div>
     <div class="num">
       <div>Total de horas: <b>{{ hm(b.total) }}</b></div>
+      {% if b.f.hibrido %}
+      <div class="mini">interno {{ hm(b.interno) }} · home {{ hm(b.home) }}</div>
+      {% endif %}
+      <div class="mini">horas {{ brl(b.bruto) }}{% if b.bonus %} + bônus {{ brl(b.bonus) }}{% endif %}{% if b.desconto %} − desconto {{ brl(b.desconto) }}{% endif %}</div>
       <div>A receber: <b style="color:var(--amarelo)">{{ brl(b.valor) }}</b></div>
     </div>
   </div>
@@ -56,6 +73,17 @@
     </form>
     {% endfor %}
   </div>
+
+  <form method="post" action="/admin/semana/ajuste" class="ajuste noprint">
+    <input type="hidden" name="funcionario_id" value="{{ b.f.id }}">
+    <input type="hidden" name="ini" value="{{ ini }}">
+    <input type="hidden" name="voltar" value="/admin/semana?ini={{ ini }}{% if filtro %}&f={{ filtro }}{% endif %}">
+    <div><label>Bônus (R$)</label><input name="bonus" value="{{ '%.2f'|format(b.bonus)|replace('.', ',') }}"></div>
+    <div><label>Desconto (R$)</label><input name="desconto" value="{{ '%.2f'|format(b.desconto)|replace('.', ',') }}"></div>
+    <div><label>Motivo</label><input name="obs" value="{{ b.obs }}" placeholder="opcional"></div>
+    <button class="btn claro" type="submit">Salvar</button>
+  </form>
+  {% if b.obs %}<p class="mini so-print">Bônus/desconto: {{ b.obs }}</p>{% endif %}
 </div>
 {% endfor %}
 
@@ -68,6 +96,6 @@
 
 <form method="post" action="/admin/semana/fechar" class="noprint">
   <input type="hidden" name="ini" value="{{ ini }}">
-  <button class="btn verde" type="submit" onclick="return confirm('Fechar a semana e guardar na ficha de cada um?')">Fechar semana e guardar nas fichas</button>
+  <button class="btn verde" type="submit">{% if fechada %}Refazer o fechamento desta semana{% else %}Fechar semana e guardar nas fichas{% endif %}</button>
 </form>
 {% endblock %}
