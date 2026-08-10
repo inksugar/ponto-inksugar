@@ -235,7 +235,22 @@ def pessoa(fid):
             (fid, hoje()),
         )
         fechado = cur.fetchone()
-    return render_template("pessoa.html", f=f, aberto=aberto, fechado=fechado)
+    return render_template("pessoa.html", f=f, aberto=aberto, fechado=fechado,
+                           feito=request.args.get("feito"),
+                           ajustado=request.args.get("ajustado"))
+
+
+@app.route("/ponto/<int:fid>/semana")
+def semana_pessoa(fid):
+    ini, fim = semana_de(hoje())
+    with db() as conn, conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        cur.execute("SELECT * FROM funcionarios WHERE id=%s AND ativo", (fid,))
+        f = cur.fetchone()
+        if not f:
+            return redirect(url_for("ponto"))
+        linhas, interno, home = semana_do_funcionario(cur, fid, ini, fim)
+    return render_template("minha_semana.html", f=f, linhas=linhas, ini=ini, fim=fim,
+                           total=interno + home, interno=interno, home=home)
 
 
 @app.route("/ponto/<int:fid>/entrada", methods=["POST"])
@@ -252,12 +267,10 @@ def bater_entrada(fid):
             "INSERT INTO pontos (funcionario_id, dia, entrada) VALUES (%s,%s,%s)",
             (fid, n.date(), n),
         )
-    return render_template("ok.html", f=f, tipo="Entrada", cor="entrada",
-                           hora=n.strftime("%H:%M"),
-                           detalhe="Bom trabalho! Na saída a gente pergunta o almoço.")
+    return redirect(url_for("pessoa", fid=fid, feito="entrada"))
 
 
-@app.route("/ponto/<int:fid>/saida", methods=["GET", "POST"])
+@app.route("/ponto/<int:fid>/saida", methods=["POST"])
 def bater_saida(fid):
     with db() as conn, conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
         cur.execute("SELECT * FROM funcionarios WHERE id=%s AND ativo", (fid,))
@@ -269,19 +282,12 @@ def bater_saida(fid):
             return redirect(url_for("pessoa", fid=fid))
 
         n = agora()
-        bruto = int((n - aberto["entrada"]).total_seconds() // 60)
-
-        if request.method == "GET":
-            return render_template("almoco.html", f=f, aberto=aberto,
-                                   padrao=ALMOCO_PADRAO, bruto=bruto,
-                                   saida_prevista=n.strftime("%H:%M"))
 
         try:
             almoco = max(0, min(240, int(request.form.get("almoco") or 0)))
         except ValueError:
             almoco = ALMOCO_PADRAO
-        local = request.form.get("local") if f["hibrido"] else "interno"
-        local = local if local in ("interno", "home") else "interno"
+        local = "home" if (f["hibrido"] and request.form.get("home")) else "interno"
 
         almoco, minutos, ajustado = calcula(aberto["entrada"], n, almoco)
         cur.execute(
@@ -289,12 +295,8 @@ def bater_saida(fid):
             (n, almoco, minutos, local, aberto["id"]),
         )
 
-    onde = " em home office" if local == "home" else ""
-    detalhe = f"{almoco} min de almoço registrados. Total do dia{onde}: {hm(minutos)}."
-    aviso = ("A jornada passou de 7h, então o almoço foi ajustado para 30 min."
-             if ajustado else None)
-    return render_template("ok.html", f=f, tipo="Saída", cor="saida",
-                           hora=n.strftime("%H:%M"), detalhe=detalhe, aviso=aviso)
+    return redirect(url_for("pessoa", fid=fid, feito="saida",
+                            ajustado=1 if ajustado else None))
 
 
 # ---------------- Admin ----------------
