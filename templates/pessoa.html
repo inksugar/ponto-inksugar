@@ -42,6 +42,31 @@
     setTimeout(() => location.href = '/ponto', 10000);
   </script>
 
+{% elif fechado and not aberto %}
+
+  <div class="card feito">
+    <div class="rotulo">Dia encerrado</div>
+    <div class="grande azul-txt">{{ hm(fechado.minutos) }}</div>
+    <div class="recado">trabalhados hoje</div>
+    <div class="resumo">
+      Entrada {{ fechado.entrada.strftime('%Hh%M') }} ·
+      saída {{ fechado.saida.strftime('%Hh%M') }} ·
+      almoço {{ fechado.almoco_min }} min{% if fechado.local == 'home' %} · home office{% endif %}
+    </div>
+  </div>
+
+  <a class="btn claro grandao" href="/ponto/{{ f.id }}/semana">VER MINHA SEMANA</a>
+
+  <p style="text-align:center;margin:22px 0 0">
+    <a href="#" class="mini" onclick="document.getElementById('nova').style.display='block';this.parentNode.style.display='none';return false;">
+      Preciso registrar uma nova entrada
+    </a>
+  </p>
+
+  <form method="post" action="/ponto/{{ f.id }}/entrada" id="nova" style="display:none;margin-top:16px">
+    <button class="btn verde grandao" type="submit">REGISTRAR NOVA ENTRADA</button>
+  </form>
+
 {% else %}
   <div class="card" style="text-align:center">
     <div class="relogio" id="relogio">--:--</div>
@@ -72,15 +97,6 @@
       <button class="btn grandao" type="submit">REGISTRAR SAÍDA</button>
     </form>
   {% else %}
-    {% if fechado %}
-    <div class="card" style="text-align:center">
-      <span class="selo saida">Dia fechado</span>
-      <p class="mini" style="margin:12px 0 0">
-        {{ fechado.entrada.strftime('%Hh%M') }} às {{ fechado.saida.strftime('%Hh%M') }} ·
-        almoço {{ fechado.almoco_min }} min · total {{ hm(fechado.minutos) }}
-      </p>
-    </div>
-    {% endif %}
     <form method="post" action="/ponto/{{ f.id }}/entrada">
       <button class="btn verde grandao" type="submit">REGISTRAR ENTRADA</button>
     </form>
