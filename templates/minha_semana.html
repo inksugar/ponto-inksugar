@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% from "_avatar.html" import avatar %}
+{% block titulo %}Minha semana{% endblock %}
+{% block canto %}<a href="/ponto/{{ f.id }}" class="mini">voltar</a>{% endblock %}
+{% block conteudo %}
+
+<div class="card topo">
+  {{ avatar(f, 'sm') }}
+  <div>
+    <div class="nome" style="font-size:1.2rem">{{ f.nome }}</div>
+    <div class="cargo">{{ ini.strftime('%d/%m') }} a {{ fim.strftime('%d/%m') }}</div>
+  </div>
+</div>
+
+<div class="card">
+  {% for l in linhas %}
+    {% if l.reg %}
+    <div class="dia-linha">
+      <div>
+        <div class="dia-nome">{{ l.dia }}</div>
+        <div class="mini">{{ l.data.strftime('%d/%m') }}</div>
+      </div>
+      <div class="mini dia-detalhe">
+        {% if l.reg.entrada %}{{ l.reg.entrada.strftime('%Hh%M') }}{% endif %}
+        {% if l.reg.saida %}às {{ l.reg.saida.strftime('%Hh%M') }}{% endif %}
+        {% if l.reg.almoco_min %}· almoço {{ l.reg.almoco_min }}min{% endif %}
+        {% if l.reg.local == 'home' %}· home{% endif %}
+      </div>
+      <div class="dia-total">
+        {% if l.reg.entrada and not l.reg.saida %}<span style="color:var(--amarelo)">em aberto</span>
+        {% else %}{{ hm(l.reg.minutos) }}{% endif %}
+      </div>
+    </div>
+    {% endif %}
+  {% endfor %}
+
+  <div class="dia-linha total-semana">
+    <div class="dia-nome">Total da semana</div>
+    <div></div>
+    <div class="dia-total">{{ hm(total) }}</div>
+  </div>
+  {% if f.hibrido and home %}
+  <p class="mini" style="text-align:right;margin:8px 0 0">interno {{ hm(interno) }} · home {{ hm(home) }}</p>
+  {% endif %}
+</div>
+
+<a class="btn claro" href="/ponto/{{ f.id }}">Voltar</a>
+{% endblock %}
