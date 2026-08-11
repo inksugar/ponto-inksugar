@@ -66,7 +66,7 @@
       <div class="tab-reg">
         <div class="linha-reg cab noprint-cab">
           <span>Dia</span><span>Data</span><span>Entrada</span><span>Saída</span>
-          <span>Almoço</span><span>Trabalhado</span><span class="noprint"></span>
+          <span>Almoço</span>{% if b.f.hibrido %}<span class="noprint">Local</span>{% endif %}<span>Trabalhado</span><span class="noprint"></span>
         </div>
         {% for l in b.linhas %}
         <div class="linha-reg">
@@ -77,6 +77,12 @@
           <input name="entrada_{{ loop.index0 }}" type="time" value="{{ l.reg.entrada.strftime('%H:%M') if l.reg and l.reg.entrada }}">
           <input name="saida_{{ loop.index0 }}" type="time" value="{{ l.reg.saida.strftime('%H:%M') if l.reg and l.reg.saida }}">
           <input name="almoco_{{ loop.index0 }}" type="number" min="0" max="240" step="5" value="{{ l.reg.almoco_min if l.reg else 0 }}">
+          {% if b.f.hibrido %}
+          <select name="local_{{ loop.index0 }}" class="noprint">
+            <option value="interno" {% if not l.reg or l.reg.local != 'home' %}selected{% endif %}>Interno</option>
+            <option value="home" {% if l.reg and l.reg.local == 'home' %}selected{% endif %}>Home</option>
+          </select>
+          {% endif %}
           <span class="num tt" {% if l.reg and l.reg.entrada and not l.reg.saida %}style="color:var(--vermelho)"{% endif %}>
             {% if l.reg and l.reg.entrada and not l.reg.saida %}sem saída{% else %}{{ hm(l.reg.minutos) if l.reg else '—' }}{% endif %}
           </span>
