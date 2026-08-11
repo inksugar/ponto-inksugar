@@ -8,8 +8,15 @@
   {{ avatar(f, 'sm') }}
   <div>
     <div class="nome" style="font-size:1.2rem">{{ f.nome }}</div>
-    <div class="cargo">{{ ini.strftime('%d/%m') }} a {{ fim.strftime('%d/%m') }}</div>
+    <div class="cargo">{{ ini.strftime('%d/%m') }} a {{ fim.strftime('%d/%m') }}{% if atual %} · semana atual{% endif %}</div>
   </div>
+</div>
+
+<div class="barra">
+  <a class="btn claro" style="width:auto" href="/ponto/{{ f.id }}/semana?ini={{ anterior }}">← semana anterior</a>
+  {% if not atual %}
+  <a class="btn claro" style="width:auto" href="/ponto/{{ f.id }}/semana?ini={{ proxima }}">próxima semana →</a>
+  {% endif %}
 </div>
 
 <div class="card">
@@ -33,6 +40,10 @@
     </div>
     {% endif %}
   {% endfor %}
+
+  {% if not linhas | selectattr('reg') | list %}
+  <p class="mini" style="text-align:center;margin:6px 0">Nenhum registro nesta semana.</p>
+  {% endif %}
 
   <div class="dia-linha total-semana">
     <div class="dia-nome">Total da semana</div>

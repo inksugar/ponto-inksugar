@@ -44,45 +44,43 @@
     </div>
   </div>
 
-  <div class="tab-reg">
-    <div class="linha-reg cab noprint-cab">
-      <span>Dia</span><span>Data</span><span>Entrada</span><span>Saída</span>
-      <span>Almoço</span><span>Trabalhado</span><span class="noprint"></span>
-    </div>
-    {% for l in b.linhas %}
-    <form method="post" action="/admin/registro" class="linha-reg">
-      <input type="hidden" name="voltar" value="/admin/semana?ini={{ ini }}{% if filtro %}&f={{ filtro }}{% endif %}">
-      <input type="hidden" name="funcionario_id" value="{{ b.f.id }}">
-      <input type="hidden" name="dia" value="{{ l.data }}">
-      {% if l.reg %}<input type="hidden" name="id" value="{{ l.reg.id }}">{% endif %}
-      <span class="dia">{{ l.dia }}</span>
-      <span class="mini">{{ l.data.strftime('%d/%m') }}</span>
-      <input name="entrada" type="time" value="{{ l.reg.entrada.strftime('%H:%M') if l.reg and l.reg.entrada }}">
-      <input name="saida" type="time" value="{{ l.reg.saida.strftime('%H:%M') if l.reg and l.reg.saida }}">
-      <input name="almoco" type="number" min="0" max="240" step="5" value="{{ l.reg.almoco_min if l.reg else 0 }}">
-      <span class="num tt" {% if l.reg and l.reg.entrada and not l.reg.saida %}style="color:var(--vermelho)"{% endif %}>
-        {% if l.reg and l.reg.entrada and not l.reg.saida %}sem saída{% else %}{{ hm(l.reg.minutos) if l.reg else '—' }}{% endif %}
-      </span>
-      <span class="acoes noprint">
-        <button class="btn claro" type="submit">Salvar</button>
-        {% if l.reg %}
-        <button class="btn claro apaga" type="submit" formaction="/admin/registro/{{ l.reg.id }}/excluir"
-                formnovalidate onclick="return confirm('Excluir este registro?')">×</button>
-        {% endif %}
-      </span>
-    </form>
-    {% endfor %}
-  </div>
-
-  <form method="post" action="/admin/semana/ajuste" class="ajuste noprint">
+  <form method="post" action="/admin/semana/salvar">
+    <input type="hidden" name="voltar" value="/admin/semana?ini={{ ini }}{% if filtro %}&f={{ filtro }}{% endif %}">
     <input type="hidden" name="funcionario_id" value="{{ b.f.id }}">
     <input type="hidden" name="ini" value="{{ ini }}">
-    <input type="hidden" name="voltar" value="/admin/semana?ini={{ ini }}{% if filtro %}&f={{ filtro }}{% endif %}">
-    <div><label>Bônus (R$)</label><input name="bonus" value="{{ '%.2f'|format(b.bonus)|replace('.', ',') }}"></div>
-    <div><label>Desconto (R$)</label><input name="desconto" value="{{ '%.2f'|format(b.desconto)|replace('.', ',') }}"></div>
-    <div><label>Motivo</label><input name="obs" value="{{ b.obs }}" placeholder="opcional"></div>
-    <button class="btn claro" type="submit">Salvar</button>
+    <input type="hidden" name="n" value="{{ b.linhas|length }}">
+
+    <div class="tab-reg">
+      <div class="linha-reg cab noprint-cab">
+        <span>Dia</span><span>Data</span><span>Entrada</span><span>Saída</span>
+        <span>Almoço</span><span>Trabalhado</span><span class="noprint"></span>
+      </div>
+      {% for l in b.linhas %}
+      <div class="linha-reg">
+        <input type="hidden" name="dia_{{ loop.index0 }}" value="{{ l.data }}">
+        {% if l.reg %}<input type="hidden" name="id_{{ loop.index0 }}" value="{{ l.reg.id }}">{% endif %}
+        <span class="dia">{{ l.dia }}</span>
+        <span class="mini">{{ l.data.strftime('%d/%m') }}</span>
+        <input name="entrada_{{ loop.index0 }}" type="time" value="{{ l.reg.entrada.strftime('%H:%M') if l.reg and l.reg.entrada }}">
+        <input name="saida_{{ loop.index0 }}" type="time" value="{{ l.reg.saida.strftime('%H:%M') if l.reg and l.reg.saida }}">
+        <input name="almoco_{{ loop.index0 }}" type="number" min="0" max="240" step="5" value="{{ l.reg.almoco_min if l.reg else 0 }}">
+        <span class="num tt" {% if l.reg and l.reg.entrada and not l.reg.saida %}style="color:var(--vermelho)"{% endif %}>
+          {% if l.reg and l.reg.entrada and not l.reg.saida %}sem saída{% else %}{{ hm(l.reg.minutos) if l.reg else '—' }}{% endif %}
+        </span>
+        <span class="acoes noprint"></span>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="ajuste noprint">
+      <div><label>Bônus (R$)</label><input name="bonus" value="{{ '%.2f'|format(b.bonus)|replace('.', ',') }}"></div>
+      <div><label>Desconto (R$)</label><input name="desconto" value="{{ '%.2f'|format(b.desconto)|replace('.', ',') }}"></div>
+      <div><label>Motivo</label><input name="obs" value="{{ b.obs }}" placeholder="opcional"></div>
+    </div>
+
+    <button class="btn verde noprint" type="submit" style="margin-top:14px">Salvar a semana de {{ b.f.nome.split(' ')[0] }}</button>
   </form>
+
   {% if b.obs %}<p class="mini so-print">Bônus/desconto: {{ b.obs }}</p>{% endif %}
 </div>
 {% endfor %}
