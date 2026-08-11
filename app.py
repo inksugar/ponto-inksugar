@@ -491,6 +491,7 @@ def salvar_semana_pessoa():
                 almoco = max(0, min(240, int(request.form.get(f"almoco_{i}") or 0)))
             except ValueError:
                 almoco = 0
+            local = "home" if (request.form.get(f"local_{i}") == "home") else "interno"
             entrada = datetime.combine(d, datetime.strptime(e, "%H:%M").time()) if e else None
             saida = datetime.combine(d, datetime.strptime(s, "%H:%M").time()) if s else None
             if entrada and saida and saida < entrada:
@@ -500,12 +501,12 @@ def salvar_semana_pessoa():
                 if not entrada and not saida:
                     cur.execute("DELETE FROM pontos WHERE id=%s", (rid,))
                 else:
-                    cur.execute("""UPDATE pontos SET dia=%s,entrada=%s,saida=%s,almoco_min=%s,minutos=%s
-                                   WHERE id=%s""", (d, entrada, saida, almoco, minutos, rid))
+                    cur.execute("""UPDATE pontos SET dia=%s,entrada=%s,saida=%s,almoco_min=%s,minutos=%s,local=%s
+                                   WHERE id=%s""", (d, entrada, saida, almoco, minutos, local, rid))
             elif entrada or saida:
-                cur.execute("""INSERT INTO pontos (funcionario_id,dia,entrada,saida,almoco_min,minutos)
-                               VALUES (%s,%s,%s,%s,%s,%s)""",
-                            (fid, d, entrada, saida, almoco, minutos))
+                cur.execute("""INSERT INTO pontos (funcionario_id,dia,entrada,saida,almoco_min,minutos,local)
+                               VALUES (%s,%s,%s,%s,%s,%s,%s)""",
+                            (fid, d, entrada, saida, almoco, minutos, local))
         bonus = dinheiro(request.form.get("bonus"))
         desconto = dinheiro(request.form.get("desconto"))
         obs = (request.form.get("obs") or "").strip()[:200]
