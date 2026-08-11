@@ -154,6 +154,11 @@ def home():
     return redirect(url_for("ponto"))
 
 
+@app.route("/ping")
+def ping():
+    return "ok", 200, {"Content-Type": "text/plain"}
+
+
 @app.route("/sw.js")
 def sw():
     return app.send_static_file("sw.js"), 200, {"Content-Type": "application/javascript"}
@@ -171,7 +176,6 @@ def manifest_pessoa(fid):
         f = cur.fetchone()
     if not f:
         return redirect(url_for("manifest"))
-
     icone = url_for("icone_pessoa", fid=fid) if f["foto"] else "/static/icon-512.png"
     dados = {
         "name": f"Ponto — {f['nome']}",
@@ -242,7 +246,13 @@ def pessoa(fid):
 
 @app.route("/ponto/<int:fid>/semana")
 def semana_pessoa(fid):
-    ini, fim = semana_de(hoje())
+    base = semana_de(hoje())[0]
+    try:
+        ini = date.fromisoformat(request.args.get("ini") or base.isoformat())
+    except ValueError:
+        ini = base
+    ini = semana_de(ini)[0]
+    fim = ini + timedelta(days=6)
     with db() as conn, conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
         cur.execute("SELECT * FROM funcionarios WHERE id=%s AND ativo", (fid,))
         f = cur.fetchone()
@@ -250,7 +260,10 @@ def semana_pessoa(fid):
             return redirect(url_for("ponto"))
         linhas, interno, home = semana_do_funcionario(cur, fid, ini, fim)
     return render_template("minha_semana.html", f=f, linhas=linhas, ini=ini, fim=fim,
-                           total=interno + home, interno=interno, home=home)
+                           total=interno + home, interno=interno, home=home,
+                           anterior=ini - timedelta(days=7),
+                           proxima=ini + timedelta(days=7),
+                           atual=(ini == base))
 
 
 @app.route("/ponto/<int:fid>/entrada", methods=["POST"])
@@ -280,21 +293,17 @@ def bater_saida(fid):
         aberto = registro_aberto(cur, fid)
         if not aberto:
             return redirect(url_for("pessoa", fid=fid))
-
         n = agora()
-
         try:
             almoco = max(0, min(240, int(request.form.get("almoco") or 0)))
         except ValueError:
             almoco = ALMOCO_PADRAO
         local = "home" if (f["hibrido"] and request.form.get("home")) else "interno"
-
         almoco, minutos, ajustado = calcula(aberto["entrada"], n, almoco)
         cur.execute(
             "UPDATE pontos SET saida=%s, almoco_min=%s, minutos=%s, local=%s WHERE id=%s",
             (n, almoco, minutos, local, aberto["id"]),
         )
-
     return redirect(url_for("pessoa", fid=fid, feito="saida",
                             ajustado=1 if ajustado else None))
 
@@ -335,7 +344,6 @@ def pendencias(cur):
         ORDER BY p.dia
     """, (hoje(),))
     abertos = cur.fetchall()
-
     cur.execute("""
         SELECT f.nome FROM funcionarios f
         WHERE f.ativo AND NOT EXISTS (
@@ -370,7 +378,6 @@ def salvar_funcionario():
     valor_home = dinheiro(request.form.get("valor_hora_home")) if hibrido else 0
     ativo = bool(request.form.get("ativo"))
     foto = request.form.get("foto") or None
-
     with db() as conn, conn.cursor() as cur:
         if fid:
             if foto:
@@ -404,7 +411,6 @@ def semana_do_funcionario(cur, fid, ini, fim):
     regs = {}
     for r in cur.fetchall():
         regs.setdefault(r["dia"], []).append(r)
-
     linhas, interno, home = [], 0, 0
     for i in range(7):
         d = ini + timedelta(days=i)
@@ -446,7 +452,6 @@ def semana():
     ini = date.fromisoformat(request.args.get("ini") or semana_de(hoje())[0].isoformat())
     fim = ini + timedelta(days=6)
     fid = request.args.get("f")
-
     with db() as conn, conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
         if fid:
             cur.execute("SELECT * FROM funcionarios WHERE id=%s", (fid,))
@@ -454,16 +459,63 @@ def semana():
         else:
             cur.execute("SELECT * FROM funcionarios WHERE ativo ORDER BY nome")
             equipe = cur.fetchall()
-
         blocos = [bloco_semana(cur, f, ini, fim) for f in equipe]
         cur.execute("SELECT * FROM fechamentos WHERE ini=%s ORDER BY criado_em DESC LIMIT 1", (ini,))
         ja = cur.fetchone()
-
     return render_template("semana.html", blocos=blocos, ini=ini, fim=fim,
                            anterior=ini - timedelta(days=7), proxima=ini + timedelta(days=7),
                            filtro=fid, total_geral=sum(b["valor"] for b in blocos),
                            fechada=ja["criado_em"] if ja else None,
                            confirmar=request.args.get("confirmar"))
+
+
+@app.route("/admin/semana/salvar", methods=["POST"])
+@admin_only
+def salvar_semana_pessoa():
+    fid = request.form["funcionario_id"]
+    ini = date.fromisoformat(request.form["ini"])
+    try:
+        n = max(0, min(50, int(request.form.get("n") or 0)))
+    except ValueError:
+        n = 0
+    with db() as conn, conn.cursor() as cur:
+        for i in range(n):
+            try:
+                d = date.fromisoformat(request.form.get(f"dia_{i}") or "")
+            except ValueError:
+                continue
+            rid = (request.form.get(f"id_{i}") or "").strip()
+            e = (request.form.get(f"entrada_{i}") or "").strip()
+            s = (request.form.get(f"saida_{i}") or "").strip()
+            try:
+                almoco = max(0, min(240, int(request.form.get(f"almoco_{i}") or 0)))
+            except ValueError:
+                almoco = 0
+            entrada = datetime.combine(d, datetime.strptime(e, "%H:%M").time()) if e else None
+            saida = datetime.combine(d, datetime.strptime(s, "%H:%M").time()) if s else None
+            if entrada and saida and saida < entrada:
+                saida += timedelta(days=1)
+            minutos = max(0, int((saida - entrada).total_seconds() // 60) - almoco) if entrada and saida else None
+            if rid:
+                if not entrada and not saida:
+                    cur.execute("DELETE FROM pontos WHERE id=%s", (rid,))
+                else:
+                    cur.execute("""UPDATE pontos SET dia=%s,entrada=%s,saida=%s,almoco_min=%s,minutos=%s
+                                   WHERE id=%s""", (d, entrada, saida, almoco, minutos, rid))
+            elif entrada or saida:
+                cur.execute("""INSERT INTO pontos (funcionario_id,dia,entrada,saida,almoco_min,minutos)
+                               VALUES (%s,%s,%s,%s,%s,%s)""",
+                            (fid, d, entrada, saida, almoco, minutos))
+        bonus = dinheiro(request.form.get("bonus"))
+        desconto = dinheiro(request.form.get("desconto"))
+        obs = (request.form.get("obs") or "").strip()[:200]
+        cur.execute("""
+            INSERT INTO ajustes (funcionario_id, ini, bonus, desconto, obs)
+            VALUES (%s,%s,%s,%s,%s)
+            ON CONFLICT (funcionario_id, ini)
+            DO UPDATE SET bonus=EXCLUDED.bonus, desconto=EXCLUDED.desconto, obs=EXCLUDED.obs
+        """, (fid, ini, bonus, desconto, obs))
+    return redirect(request.form.get("voltar") or url_for("semana", ini=ini.isoformat()))
 
 
 @app.route("/admin/semana/ajuste", methods=["POST"])
@@ -490,13 +542,11 @@ def fechar_semana():
     ini = date.fromisoformat(request.form["ini"])
     fim = ini + timedelta(days=6)
     confirmado = request.form.get("confirmado")
-
     with db() as conn, conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
         if not confirmado:
             cur.execute("SELECT 1 FROM fechamentos WHERE ini=%s LIMIT 1", (ini,))
             if cur.fetchone():
                 return redirect(url_for("semana", ini=ini.isoformat(), confirmar=1))
-
         cur.execute("SELECT * FROM funcionarios WHERE ativo ORDER BY nome")
         for f in cur.fetchall():
             b = bloco_semana(cur, f, ini, fim)
@@ -539,13 +589,11 @@ def salvar_registro():
         almoco = max(0, min(240, int(request.form.get("almoco") or 0)))
     except ValueError:
         almoco = 0
-
     entrada = datetime.combine(dia, datetime.strptime(e, "%H:%M").time()) if e else None
     saida = datetime.combine(dia, datetime.strptime(s, "%H:%M").time()) if s else None
     if entrada and saida and saida < entrada:
         saida += timedelta(days=1)
     minutos = max(0, int((saida - entrada).total_seconds() // 60) - almoco) if entrada and saida else None
-
     with db() as conn, conn.cursor() as cur:
         if rid:
             cur.execute("UPDATE pontos SET dia=%s,entrada=%s,saida=%s,almoco_min=%s,minutos=%s WHERE id=%s",
@@ -584,7 +632,6 @@ def alertas():
     if not CRON_TOKEN or request.args.get("token") != CRON_TOKEN:
         return "nao autorizado", 403
     tipo = request.args.get("tipo", "saida")
-
     with db() as conn, conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
         abertos, sem_entrada = pendencias(cur)
         if tipo == "entrada":
@@ -598,7 +645,6 @@ def alertas():
             if not nomes or hoje().weekday() >= 5:
                 return "nada a avisar"
             return whats("Ponto InkSugar: ainda sem entrada hoje — " + ", ".join(nomes))
-
         if tipo == "fechamento":
             ini, fim = semana_de(hoje() - timedelta(days=1))
             cur.execute("SELECT 1 FROM fechamentos WHERE ini=%s LIMIT 1", (ini,))
@@ -606,7 +652,6 @@ def alertas():
                 return "semana ja fechada"
             return whats(f"Ponto InkSugar: semana {ini.strftime('%d/%m')} a {fim.strftime('%d/%m')} "
                          f"pronta pra fechar quando você puder.")
-
         cur.execute("""
             SELECT f.nome, p.dia FROM pontos p JOIN funcionarios f ON f.id=p.funcionario_id
             WHERE p.saida IS NULL ORDER BY p.dia
