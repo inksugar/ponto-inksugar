@@ -48,7 +48,13 @@
       </div>
       <div>
         <label>Situação</label>
-        <label class="mini quadro"><input type="checkbox" name="ativo" {% if f.ativo %}checked{% endif %}> aparece no ponto</label>
+        <label class="mini quadro"><input type="checkbox" name="aparece_no_ponto" {% if f.aparece_no_ponto %}checked{% endif %}> aparece no ponto</label>
+        <p class="mini" style="margin:6px 0 0">Desmarcado: some da tela de seleção do /ponto, mas continua normal na semana, nos totais e nos fechamentos — você lança as horas manualmente.</p>
+      </div>
+      <div>
+        <label>Arquivar</label>
+        <label class="mini quadro"><input type="checkbox" name="arquivado" {% if f.arquivado %}checked{% endif %}> arquivada</label>
+        <p class="mini" style="margin:6px 0 0">Marcado: some de tudo (ponto, semana, totais, alertas). Fica só na lista de Arquivados abaixo, com histórico e fichas intactos.</p>
       </div>
     </div>
     <div class="barra" style="margin:14px 0 0">
@@ -64,6 +70,26 @@
   <p class="mini">Ninguém cadastrado ainda.</p>
   {% endfor %}
 </div>
+
+{% if arquivados %}
+<div class="card">
+  <h2>Arquivados</h2>
+  <p class="mini" style="margin-top:-8px">Somem do ponto, da semana, dos totais e dos alertas. Histórico e fichas continuam acessíveis.</p>
+  {% for f in arquivados %}
+  <div style="display:flex;gap:14px;align-items:center;padding:10px 0;border-bottom:1px solid var(--linha)">
+    {{ avatar(f, 'sm') }}
+    <div style="flex:1">
+      <div class="nome">{{ f.nome }}</div>
+      <div class="cargo">{{ f.cargo }}</div>
+    </div>
+    <a class="btn claro" style="width:auto;margin:0" href="/admin/ficha/{{ f.id }}">Ficha</a>
+    <form method="post" action="/admin/funcionario/{{ f.id }}/desarquivar" style="margin:0">
+      <button class="btn claro" style="width:auto;margin:0" type="submit">Desarquivar</button>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
 
 <div class="card">
   <h2>Incluir funcionário</h2>

@@ -8,7 +8,7 @@
   {{ avatar(f, 'sm') }}
   <div>
     <div class="nome" style="font-size:1.2rem">{{ f.nome }}</div>
-    <div class="cargo">{{ f.cargo }} · {{ brl(f.valor_hora) }}/h{% if not f.ativo %} · inativa{% endif %}</div>
+    <div class="cargo">{{ f.cargo }} · {{ brl(f.valor_hora) }}/h{% if f.arquivado %} · arquivada{% elif not f.aparece_no_ponto %} · não aparece no ponto{% endif %}</div>
   </div>
 </div>
 

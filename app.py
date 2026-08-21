@@ -48,7 +48,9 @@ def init_db():
                 hibrido BOOLEAN NOT NULL DEFAULT FALSE,
                 valor_hora_home NUMERIC(10,2) NOT NULL DEFAULT 0,
                 foto TEXT,
-                ativo BOOLEAN NOT NULL DEFAULT TRUE
+                ativo BOOLEAN NOT NULL DEFAULT TRUE,
+                aparece_no_ponto BOOLEAN NOT NULL DEFAULT TRUE,
+                arquivado BOOLEAN NOT NULL DEFAULT FALSE
             );
             CREATE TABLE IF NOT EXISTS pontos (
                 id SERIAL PRIMARY KEY,
@@ -89,7 +91,20 @@ def init_db():
             ALTER TABLE fechamentos ADD COLUMN IF NOT EXISTS bonus NUMERIC(10,2) NOT NULL DEFAULT 0;
             ALTER TABLE fechamentos ADD COLUMN IF NOT EXISTS desconto NUMERIC(10,2) NOT NULL DEFAULT 0;
             ALTER TABLE fechamentos ADD COLUMN IF NOT EXISTS obs TEXT DEFAULT '';
+            ALTER TABLE funcionarios ADD COLUMN IF NOT EXISTS arquivado BOOLEAN NOT NULL DEFAULT FALSE;
         """)
+
+        # aparece_no_ponto substitui o antigo campo `ativo`. Se a coluna ainda
+        # não existe (banco criado antes dessa mudança), cria e migra o valor
+        # atual de `ativo` uma única vez — sem isso, um restart do servidor
+        # reaplicaria esse UPDATE toda vez e apagaria edições futuras do campo.
+        cur.execute("""
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name='funcionarios' AND column_name='aparece_no_ponto'
+        """)
+        if not cur.fetchone():
+            cur.execute("ALTER TABLE funcionarios ADD COLUMN aparece_no_ponto BOOLEAN NOT NULL DEFAULT TRUE")
+            cur.execute("UPDATE funcionarios SET aparece_no_ponto = ativo")
 
 
 def agora():
@@ -213,7 +228,7 @@ def icone_pessoa(fid):
 @app.route("/ponto")
 def ponto():
     with db() as conn, conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-        cur.execute("SELECT * FROM funcionarios WHERE ativo ORDER BY nome")
+        cur.execute("SELECT * FROM funcionarios WHERE aparece_no_ponto AND NOT arquivado ORDER BY nome")
         equipe = cur.fetchall()
     return render_template("ponto.html", equipe=equipe)
 
@@ -229,7 +244,7 @@ def registro_aberto(cur, fid):
 @app.route("/ponto/<int:fid>")
 def pessoa(fid):
     with db() as conn, conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-        cur.execute("SELECT * FROM funcionarios WHERE id=%s AND ativo", (fid,))
+        cur.execute("SELECT * FROM funcionarios WHERE id=%s AND NOT arquivado", (fid,))
         f = cur.fetchone()
         if not f:
             return redirect(url_for("ponto"))
@@ -254,7 +269,7 @@ def semana_pessoa(fid):
     ini = semana_de(ini)[0]
     fim = ini + timedelta(days=6)
     with db() as conn, conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-        cur.execute("SELECT * FROM funcionarios WHERE id=%s AND ativo", (fid,))
+        cur.execute("SELECT * FROM funcionarios WHERE id=%s AND NOT arquivado", (fid,))
         f = cur.fetchone()
         if not f:
             return redirect(url_for("ponto"))
@@ -269,7 +284,7 @@ def semana_pessoa(fid):
 @app.route("/ponto/<int:fid>/entrada", methods=["POST"])
 def bater_entrada(fid):
     with db() as conn, conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-        cur.execute("SELECT * FROM funcionarios WHERE id=%s AND ativo", (fid,))
+        cur.execute("SELECT * FROM funcionarios WHERE id=%s AND NOT arquivado", (fid,))
         f = cur.fetchone()
         if not f:
             return redirect(url_for("ponto"))
@@ -286,7 +301,7 @@ def bater_entrada(fid):
 @app.route("/ponto/<int:fid>/saida", methods=["POST"])
 def bater_saida(fid):
     with db() as conn, conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-        cur.execute("SELECT * FROM funcionarios WHERE id=%s AND ativo", (fid,))
+        cur.execute("SELECT * FROM funcionarios WHERE id=%s AND NOT arquivado", (fid,))
         f = cur.fetchone()
         if not f:
             return redirect(url_for("ponto"))
@@ -340,13 +355,13 @@ def pendencias(cur):
     cur.execute("""
         SELECT p.id, p.dia, f.nome
         FROM pontos p JOIN funcionarios f ON f.id = p.funcionario_id
-        WHERE p.saida IS NULL AND p.dia < %s
+        WHERE p.saida IS NULL AND p.dia < %s AND NOT f.arquivado
         ORDER BY p.dia
     """, (hoje(),))
     abertos = cur.fetchall()
     cur.execute("""
         SELECT f.nome FROM funcionarios f
-        WHERE f.ativo AND NOT EXISTS (
+        WHERE f.aparece_no_ponto AND NOT f.arquivado AND NOT EXISTS (
             SELECT 1 FROM pontos p WHERE p.funcionario_id = f.id AND p.dia = %s
         ) ORDER BY f.nome
     """, (hoje(),))
@@ -359,10 +374,12 @@ def pendencias(cur):
 def admin():
     ini, fim = semana_de(hoje())
     with db() as conn, conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-        cur.execute("SELECT * FROM funcionarios ORDER BY ativo DESC, nome")
+        cur.execute("SELECT * FROM funcionarios WHERE NOT arquivado ORDER BY aparece_no_ponto DESC, nome")
         equipe = cur.fetchall()
+        cur.execute("SELECT * FROM funcionarios WHERE arquivado ORDER BY nome")
+        arquivados = cur.fetchall()
         abertos, sem_entrada = pendencias(cur)
-    return render_template("admin.html", equipe=equipe, ini=ini, fim=fim,
+    return render_template("admin.html", equipe=equipe, arquivados=arquivados, ini=ini, fim=fim,
                            abertos=abertos, sem_entrada=sem_entrada,
                            dia_semana=hoje().weekday())
 
@@ -376,18 +393,19 @@ def salvar_funcionario():
     valor = dinheiro(request.form.get("valor_hora"))
     hibrido = bool(request.form.get("hibrido"))
     valor_home = dinheiro(request.form.get("valor_hora_home")) if hibrido else 0
-    ativo = bool(request.form.get("ativo"))
+    aparece_no_ponto = bool(request.form.get("aparece_no_ponto"))
+    arquivado = bool(request.form.get("arquivado"))
     foto = request.form.get("foto") or None
     with db() as conn, conn.cursor() as cur:
         if fid:
             if foto:
                 cur.execute("""UPDATE funcionarios SET nome=%s,cargo=%s,valor_hora=%s,
-                               hibrido=%s,valor_hora_home=%s,ativo=%s,foto=%s WHERE id=%s""",
-                            (nome, cargo, valor, hibrido, valor_home, ativo, foto, fid))
+                               hibrido=%s,valor_hora_home=%s,aparece_no_ponto=%s,arquivado=%s,foto=%s WHERE id=%s""",
+                            (nome, cargo, valor, hibrido, valor_home, aparece_no_ponto, arquivado, foto, fid))
             else:
                 cur.execute("""UPDATE funcionarios SET nome=%s,cargo=%s,valor_hora=%s,
-                               hibrido=%s,valor_hora_home=%s,ativo=%s WHERE id=%s""",
-                            (nome, cargo, valor, hibrido, valor_home, ativo, fid))
+                               hibrido=%s,valor_hora_home=%s,aparece_no_ponto=%s,arquivado=%s WHERE id=%s""",
+                            (nome, cargo, valor, hibrido, valor_home, aparece_no_ponto, arquivado, fid))
         else:
             cur.execute("""INSERT INTO funcionarios (nome,cargo,valor_hora,hibrido,valor_hora_home,foto)
                            VALUES (%s,%s,%s,%s,%s,%s)""",
@@ -400,6 +418,14 @@ def salvar_funcionario():
 def excluir_funcionario(fid):
     with db() as conn, conn.cursor() as cur:
         cur.execute("DELETE FROM funcionarios WHERE id=%s", (fid,))
+    return redirect(url_for("admin"))
+
+
+@app.route("/admin/funcionario/<int:fid>/desarquivar", methods=["POST"])
+@admin_only
+def desarquivar_funcionario(fid):
+    with db() as conn, conn.cursor() as cur:
+        cur.execute("UPDATE funcionarios SET arquivado=FALSE WHERE id=%s", (fid,))
     return redirect(url_for("admin"))
 
 
@@ -457,7 +483,7 @@ def semana():
             cur.execute("SELECT * FROM funcionarios WHERE id=%s", (fid,))
             equipe = [r for r in cur.fetchall()]
         else:
-            cur.execute("SELECT * FROM funcionarios WHERE ativo ORDER BY nome")
+            cur.execute("SELECT * FROM funcionarios WHERE NOT arquivado ORDER BY nome")
             equipe = cur.fetchall()
         blocos = [bloco_semana(cur, f, ini, fim) for f in equipe]
         cur.execute("SELECT * FROM fechamentos WHERE ini=%s ORDER BY criado_em DESC LIMIT 1", (ini,))
@@ -548,7 +574,7 @@ def fechar_semana():
             cur.execute("SELECT 1 FROM fechamentos WHERE ini=%s LIMIT 1", (ini,))
             if cur.fetchone():
                 return redirect(url_for("semana", ini=ini.isoformat(), confirmar=1))
-        cur.execute("SELECT * FROM funcionarios WHERE ativo ORDER BY nome")
+        cur.execute("SELECT * FROM funcionarios WHERE NOT arquivado ORDER BY nome")
         for f in cur.fetchall():
             b = bloco_semana(cur, f, ini, fim)
             cur.execute("""
@@ -638,7 +664,7 @@ def alertas():
         if tipo == "entrada":
             cur.execute("""
                 SELECT f.nome FROM funcionarios f
-                WHERE f.ativo AND NOT EXISTS (
+                WHERE f.aparece_no_ponto AND NOT f.arquivado AND NOT EXISTS (
                     SELECT 1 FROM pontos p WHERE p.funcionario_id=f.id AND p.dia=%s
                 ) ORDER BY f.nome
             """, (hoje(),))
@@ -655,7 +681,7 @@ def alertas():
                          f"pronta pra fechar quando você puder.")
         cur.execute("""
             SELECT f.nome, p.dia FROM pontos p JOIN funcionarios f ON f.id=p.funcionario_id
-            WHERE p.saida IS NULL ORDER BY p.dia
+            WHERE p.saida IS NULL AND NOT f.arquivado ORDER BY p.dia
         """)
         pend = [f"{r['nome'].split()[0]} ({r['dia'].strftime('%d/%m')})" for r in cur.fetchall()]
     if not pend:
